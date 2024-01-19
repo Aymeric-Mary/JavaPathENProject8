@@ -2,12 +2,12 @@ package com.openclassrooms.tourguide;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.openclassrooms.tourguide.dto.GetNearByAttractionsResponseDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import gpsUtil.location.Attraction;
 import gpsUtil.location.VisitedLocation;
 
 import com.openclassrooms.tourguide.service.TourGuideService;
@@ -17,10 +17,10 @@ import com.openclassrooms.tourguide.user.UserReward;
 import tripPricer.Provider;
 
 @RestController
+@RequiredArgsConstructor
 public class TourGuideController {
 
-	@Autowired
-	TourGuideService tourGuideService;
+	private final TourGuideService tourGuideService;
 	
     @RequestMapping("/")
     public String index() {
@@ -41,10 +41,10 @@ public class TourGuideController {
         // The distance in miles between the user's location and each of the attractions.
         // The reward points for visiting each Attraction.
         //    Note: Attraction reward points can be gathered from RewardsCentral
-    @RequestMapping("/getNearbyAttractions") 
-    public List<Attraction> getNearbyAttractions(@RequestParam String userName) {
+    @RequestMapping("/getNearbyAttractions")
+    public GetNearByAttractionsResponseDto getNearbyAttractions(@RequestParam String userName) {
     	VisitedLocation visitedLocation = tourGuideService.getUserLocation(getUser(userName));
-    	return tourGuideService.getNearByAttractions(visitedLocation);
+        return tourGuideService.getNearByAttractionsResponseDto(visitedLocation, getUser(userName));
     }
     
     @RequestMapping("/getRewards") 
