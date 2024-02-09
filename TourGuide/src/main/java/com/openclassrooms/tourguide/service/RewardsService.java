@@ -1,7 +1,8 @@
 package com.openclassrooms.tourguide.service;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.*;
 
 import org.springframework.stereotype.Service;
 
@@ -37,20 +38,41 @@ public class RewardsService {
         proximityBuffer = defaultProximityBuffer;
     }
 
-    public void calculateRewards(User user) {
+    public void  calculateRewards(User user) {
+        List<Attraction> attractions = new CopyOnWriteArrayList<>(gpsUtil.getAttractions());
         List<VisitedLocation> userLocations = new CopyOnWriteArrayList<>(user.getVisitedLocations());
-        List<Attraction> attractions = gpsUtil.getAttractions();
+
+        ExecutorService executorService = Executors.newFixedThreadPool(Math.min(attractions.size(), 100));
+
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         for (VisitedLocation visitedLocation : userLocations) {
             for (Attraction attraction : attractions) {
-                if (user.getUserRewards().stream().filter(r -> r.attraction.attractionName.equals(attraction.attractionName)).count() == 0) {
-                    if (nearAttraction(visitedLocation, attraction)) {
-                        user.addUserReward(new UserReward(visitedLocation, attraction, getRewardPoints(attraction, user)));
-                    }
+                boolean alreadyRewarded = user.getUserRewards().stream()
+                        .anyMatch(r -> r.attraction.attractionName.equals(attraction.attractionName));
+
+                if (!alreadyRewarded) {
+                    CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                        if (nearAttraction(visitedLocation, attraction)) {
+                            user.addUserReward(new UserReward(visitedLocation, attraction, getRewardPoints(attraction, user)));
+                        }
+                    }, executorService);
+                    futures.add(future);
                 }
             }
         }
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        try {
+            executorService.shutdown();
+            if (!executorService.awaitTermination(800, TimeUnit.MILLISECONDS)) {
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+        }
     }
+
 
     public boolean isWithinAttractionProximity(Attraction attraction, Location location) {
         return getDistance(attraction, location) <= attractionProximityRange;
@@ -71,7 +93,7 @@ public class RewardsService {
         double lon2 = Math.toRadians(loc2.longitude);
 
         double angle = Math.acos(Math.sin(lat1) * Math.sin(lat2)
-                + Math.cos(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2));
+                                 + Math.cos(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2));
 
         double nauticalMiles = 60 * Math.toDegrees(angle);
         return STATUTE_MILES_PER_NAUTICAL_MILE * nauticalMiles;
